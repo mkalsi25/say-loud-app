@@ -13,7 +13,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.manmeetcto.say-loud-app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "This app does not use your photo library.",
+        "NSPhotoLibraryAddUsageDescription": "This app does not save to your photo library."
       }
     },
     "web": {
@@ -42,7 +44,7 @@
         "expo-speech-recognition",
         {
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone.",
-          "speechRecognitionPermission": "Allow $(PRODUCT-NAME) to transcribe speech."
+          "speechRecognitionPermission": "Allow $(PRODUCT_NAME) to transcribe speech."
         }
       ]
     ],
