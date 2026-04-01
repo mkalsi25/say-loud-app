@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "say-loud-app",
+    "name": "Say Loud",
     "slug": "say-loud-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.manmeetcto.say-loud-app"
     },
     "android": {
       "adaptiveIcon": {
@@ -38,7 +39,10 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
