@@ -35,32 +35,57 @@ type TranscribeState = "idle" | "transcribing" | "done" | "error";
 export default function HomeScreen() {
   const [text, setText] = useState("");
   const [speaking, setSpeaking] = useState(false);
+  const [permissionGranted, setPermissionGranted] = useState(false);
 
   // ── Recording ────────────────────────────────────────────────────────────
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder);
+  const recorderState = useAudioRecorderState(recorder, 500); // poll every 500ms for UI updates
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
 
   // ── Playback ─────────────────────────────────────────────────────────────
   const player = useAudioPlayer(recordingUri ? { uri: recordingUri } : null);
   const [playing, setPlaying] = useState(false);
-  const playerSub = useRef<ReturnType<typeof player.addListener> | null>(null);
 
   // ── Transcription ────────────────────────────────────────────────────────
   const [transcribeState, setTranscribeState] =
     useState<TranscribeState>("idle");
-  const transcriptAccum = useRef(""); // accumulate interim + final results
+  const transcriptAccum = useRef("");
 
-  // Request mic permission on mount
+  // ── Request permissions on mount ─────────────────────────────────────────
   useEffect(() => {
-    AudioModule.requestRecordingPermissionsAsync();
+    (async () => {
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      setPermissionGranted(granted);
+      if (!granted) {
+        console.warn("Microphone permission not granted");
+      }
+    })();
   }, []);
 
-  // Listen for STT results (interim + final)
+  // ── Reload player when recordingUri changes ──────────────────────────────
+  useEffect(() => {
+    if (recordingUri && player) {
+      player.replace({ uri: recordingUri });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordingUri]);
+
+  // ── Track playback status to detect end ──────────────────────────────────
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener("playbackStatusUpdate", (status) => {
+      // In expo-audio, check if playback has finished
+      if (playing && !status.playing && status.currentTime >= status.duration) {
+        setPlaying(false);
+      }
+    });
+    return () => sub.remove();
+  }, [player, playing]);
+
+  // ── Listen for STT results (interim + final) ────────────────────────────
   useSpeechRecognitionEvent("result", (e) => {
     const transcript = e.results[0]?.transcript ?? "";
     transcriptAccum.current = transcript;
-    // Show live interim results in the text field
     if (!e.isFinal) setText(transcript);
   });
 
@@ -91,37 +116,53 @@ export default function HomeScreen() {
 
   // ── Recording ────────────────────────────────────────────────────────────
   const handleRecord = async () => {
+    if (!permissionGranted) {
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      if (!granted) {
+        console.warn("Microphone permission denied");
+        return;
+      }
+      setPermissionGranted(true);
+    }
+
     setRecordingUri(null);
     setTranscribeState("idle");
     setText("");
     transcriptAccum.current = "";
-    await recorder.prepareToRecordAsync();
-    recorder.record();
+
+    try {
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+    }
   };
 
   const handleStopRecording = async () => {
-    await recorder.stop();
-    const uri = recorder.uri;
-    if (uri) setRecordingUri(uri);
+    try {
+      await recorder.stop();
+      // Give a small delay for the URI to be available
+      const uri = recorder.uri;
+      if (uri) {
+        setRecordingUri(uri);
+      } else {
+        console.warn("No recording URI available after stop");
+      }
+    } catch (err) {
+      console.error("Failed to stop recording:", err);
+    }
   };
 
   // ── Playback ─────────────────────────────────────────────────────────────
   const handlePlay = () => {
-    if (!recordingUri) return;
-    playerSub.current?.remove();
-    playerSub.current = player.addListener("playbackStatusUpdate", (s) => {
-      if (s.didJustFinish) {
-        setPlaying(false);
-        playerSub.current?.remove();
-      }
-    });
+    if (!recordingUri || !player) return;
     player.seekTo(0);
     player.play();
     setPlaying(true);
   };
 
   const handleStopPlay = () => {
-    player.pause();
+    if (player) player.pause();
     setPlaying(false);
   };
 
@@ -150,7 +191,8 @@ export default function HomeScreen() {
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
 
-  const hasRecording = !!recordingUri && !recorderState.isRecording;
+  const isRecording = recorderState.isRecording;
+  const hasRecording = !!recordingUri && !isRecording;
 
   return (
     <View style={styles.container}>
@@ -203,6 +245,11 @@ export default function HomeScreen() {
             ]}
           />
 
+          {/* ── Permission warning ── */}
+          {!permissionGranted && (
+            <Text style={styles.warning}>⚠ Microphone permission required</Text>
+          )}
+
           {/* ── TTS ── */}
           <Button
             label={speaking ? "Stop" : "Speak"}
@@ -218,15 +265,13 @@ export default function HomeScreen() {
 
           {/* ── Record ── */}
           <Button
-            label={recorderState.isRecording ? "Stop Recording" : "Record"}
-            onPress={
-              recorderState.isRecording ? handleStopRecording : handleRecord
-            }
+            label={isRecording ? "⏹ Stop Recording" : "🎙 Record"}
+            onPress={isRecording ? handleStopRecording : handleRecord}
             modifiers={[
               padding({ horizontal: 32, vertical: 14 }),
               glassEffect({
                 glass: {
-                  variant: recorderState.isRecording ? "identity" : "regular",
+                  variant: isRecording ? "identity" : "regular",
                 },
               }),
               cornerRadius(50),
@@ -234,9 +279,9 @@ export default function HomeScreen() {
           />
 
           {/* ── Live timer ── */}
-          {recorderState.isRecording && (
+          {isRecording && (
             <Text style={styles.timer}>
-              🔴 {fmt(recorderState.durationMillis)}
+              🔴 Recording {fmt(recorderState.durationMillis)}
             </Text>
           )}
 
@@ -244,7 +289,7 @@ export default function HomeScreen() {
           {hasRecording && (
             <>
               <Button
-                label={playing ? "Stop Playback" : "Play Recording"}
+                label={playing ? "⏹ Stop Playback" : "▶ Play Recording"}
                 onPress={playing ? handleStopPlay : handlePlay}
                 modifiers={[
                   padding({ horizontal: 32, vertical: 14 }),
@@ -257,7 +302,7 @@ export default function HomeScreen() {
 
               {transcribeState !== "transcribing" ? (
                 <Button
-                  label="Transcribe Recording"
+                  label="📝 Transcribe Recording"
                   onPress={handleTranscribe}
                   modifiers={[
                     padding({ horizontal: 32, vertical: 14 }),
@@ -270,6 +315,12 @@ export default function HomeScreen() {
                   <ActivityIndicator color="#fff" />
                   <Text style={styles.timer}> Transcribing…</Text>
                 </View>
+              )}
+
+              {transcribeState === "error" && (
+                <Text style={styles.errorText}>
+                  Transcription failed. Try again.
+                </Text>
               )}
             </>
           )}
@@ -297,5 +348,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+  },
+  warning: {
+    textAlign: "center",
+    fontSize: 14,
+    color: "#ffcc00",
+    fontWeight: "500",
+  },
+  errorText: {
+    textAlign: "center",
+    fontSize: 14,
+    color: "#ff6b6b",
+    fontWeight: "500",
   },
 });
