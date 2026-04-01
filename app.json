@@ -1,16 +1,20 @@
 {
   "expo": {
     "name": "Say Loud",
-    "slug": "say-loud-app",
+    "slug": "say-loud",
     "version": "1.0.0",
     "orientation": "portrait",
+    "owner": "engineersf",
     "icon": "./assets/images/icon.png",
     "scheme": "sayloudapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.manmeetcto.say-loud-app"
+      "bundleIdentifier": "com.manmeetcto.say-loud-app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "web": {
       "output": "static",
@@ -37,6 +41,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f9271a56-ca77-4247-b2a0-e884fc1676ff"
+      }
     }
   }
 }
